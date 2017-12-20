@@ -52,10 +52,13 @@ if ($input->hasParameterOption(['-b', '--balance'])) {
         $diff = '';
         $tick = '';
         $total = '';
-        if ('AUD' !== $instrument) { // && $bal['price']
+        if ('AUD' !== $instrument) {
+            if (!$bal['balance']) {
+                continue;
+            }
             $trades = $client->getLastTrades($instrument);
             if ($trades) {
-                $tick = $client->getLastPrice($instrument);
+                $tick = $client->getBestBid($instrument);
                 $diff = $bal['balance'] * $tick;
                 $total = number_format($diff, 2);
                 foreach ($trades as $trade) {

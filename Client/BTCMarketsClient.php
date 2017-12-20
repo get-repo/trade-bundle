@@ -102,7 +102,7 @@ class BTCMarketsClient
             $bal['balance'] = round($bal['balance'] / pow(10, 8), 7);
             $bal['price'] = $bal['balance'];
             if ($bal['price'] && in_array($bal['currency'], $this->getInstruments())) {
-                $lastPrice = $this->getLastPrice($bal['currency']);
+                $lastPrice = $this->getBestBid($bal['currency']);
                 $bal['price'] = $lastPrice * $bal['balance'];
             }
             $bal['price'] = round($bal['price'], 2);
@@ -151,6 +151,20 @@ class BTCMarketsClient
     {
         if ($tick = $this->getTick($instrument)) {
             return $tick['lastPrice'];
+        }
+
+        return false;
+    }
+
+    /**
+     * @param string $instrument
+     *
+     * @return float|false
+     */
+    public function getBestBid($instrument)
+    {
+        if ($tick = $this->getTick($instrument)) {
+            return $tick['bestBid'];
         }
 
         return false;
@@ -252,7 +266,7 @@ class BTCMarketsClient
 
                     $funds[$k]['price'] = $funds[$k]['amount'];
                     if ('AUD' !== $fund['currency']) {
-                        $funds[$k]['price'] = $funds[$k]['price'] * $this->getLastPrice($fund['currency']);
+                        $funds[$k]['price'] = $funds[$k]['price'] * $this->getBestBid($fund['currency']);
                     }
                 }
 
