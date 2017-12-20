@@ -1,0 +1,4 @@
+services:
+    trade.client.btc_markets:
+        class: GetRepo\TradeBundle\Client\BTCMarketsClient
+        arguments: ['@service_container']
