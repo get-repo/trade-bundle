@@ -6,7 +6,7 @@ use Symfony\Component\Console\Input\ArgvInput;
 use Symfony\Component\Console\Output\ConsoleOutput;
 use Symfony\Component\Console\Helper\Table;
 
-$loader = require __DIR__.'/../../../autoload.php';
+$loader = require __DIR__.'/../../../../autoload.php';
 $kernel = new AppKernel('dev', true);
 $kernel->boot();
 $container = $kernel->getContainer();
@@ -155,7 +155,7 @@ if ($input->hasParameterOption(['-b', '--balance'])) {
     }
 
     $params = explode(',', $instrument);
-    $instrument = $params[0];
+    $instrument = strtoupper($params[0]);
 
     if (!in_array($instrument, $client->getInstruments())) {
         $output->writeln("<error>Wrong instrument {$instrument}</error>");

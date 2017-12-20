@@ -18,7 +18,7 @@ class BTCMarketsClient
     /**
      * @var string
      */
-    const PYTHON_CLIENT_PATH = 'bin/api-client-python/main.py';
+    const PYTHON_CLIENT_PATH = 'bin/btc/api-client-python/main.py';
 
     use ContainerAwareTrait;
 
