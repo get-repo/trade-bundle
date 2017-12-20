@@ -44,7 +44,7 @@ class BTCMarketsClient
     {
         $this->setContainer($container);
         $this->config = $container->getParameter('trade.config')['btc_markets'];
-        $this->cache = new FilesystemCache();
+        $this->cache = new FilesystemCache('btc.client');
     }
 
     /**

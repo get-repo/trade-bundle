@@ -1,0 +1,24 @@
+#!/usr/bin/env php
+<?php
+
+use Symfony\Component\Cache\Simple\FilesystemCache;
+use Symfony\Component\Console\Formatter\OutputFormatter;
+use Symfony\Component\Console\Input\ArgvInput;
+use Symfony\Component\Console\Output\ConsoleOutput;
+use Symfony\Component\Console\Helper\Table;
+
+$loader = require __DIR__.'/../../../../autoload.php';
+$kernel = new AppKernel('dev', true);
+$kernel->boot();
+$container = $kernel->getContainer();
+$output = new ConsoleOutput();
+
+if (!isset($container->getParameter('kernel.bundles')['TradeBundle'])) {
+    $output->writeln('<error>Bundle "TradeBundle" is not enabled in AppKernel</error>');
+    exit;
+}
+
+$dataCollector = $container->get('trade.data_collector.btc_markets');
+$dataCollector->collectAll();
+
+p($dataCollector->getData('XRP'));
