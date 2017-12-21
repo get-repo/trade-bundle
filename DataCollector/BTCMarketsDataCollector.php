@@ -34,7 +34,7 @@ class BTCMarketsDataCollector
     }
 
     /**
-     * Collect data
+     * Collect data.
      *
      * @return true
      */
@@ -48,7 +48,7 @@ class BTCMarketsDataCollector
     }
 
     /**
-     * Collect data
+     * Collect data.
      *
      * @return true
      */
@@ -66,9 +66,8 @@ class BTCMarketsDataCollector
         return true;
     }
 
-
     /**
-     * Get data for instrument
+     * Get data for instrument.
      *
      * @return array
      */
@@ -76,5 +75,4 @@ class BTCMarketsDataCollector
     {
         return $this->data->get("btc.data.{$instrument}");
     }
-
 }

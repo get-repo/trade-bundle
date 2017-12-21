@@ -18,7 +18,7 @@ class BTCMarketsClient
     /**
      * @var string
      */
-    const PYTHON_CLIENT_PATH = 'bin/btc/api-client-python/main.py';
+    const PYTHON_CLIENT_PATH = 'bin/btc-api-client-python/main.py';
 
     use ContainerAwareTrait;
 
@@ -185,24 +185,23 @@ class BTCMarketsClient
             $trades = $this->call('trade_history', $currency, $instrument, 200, 1)['trades'];
 
             foreach ($trades as $i => $trade) {
+                $trade['volume'] = $trade['volume'] / pow(10, 8);
+                $trade['price'] = $trade['price'] / pow(10, 8);
+                $trade['fee'] = $trade['fee'] / pow(10, 8);
+
                 if ('Bid' === $trade['side']) {
                     $bal = $bal - $trade['volume'];
                 } else {
                     $bal = $bal + $trade['volume'];
                 }
 
-                $trade['volume'] = $trade['volume'] / pow(10, 8);
-                $trade['price'] = $trade['price'] / pow(10, 8);
-                $trade['fee'] = $trade['fee'] / pow(10, 8);
-
                 $trades[$i]['amount'] = ($trade['volume'] * $trade['price']) - $trade['fee'];
-
-                if ($bal <= 0) {
+                if (round($bal, 2) <= 0) {
                     break;
                 }
             }
 
-            $trades = array_slice($trades, 0, $i+1);
+            $trades = array_slice($trades, 0, $i + 1);
         }
 
         return $trades;
