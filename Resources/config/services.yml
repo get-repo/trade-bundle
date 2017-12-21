@@ -4,4 +4,4 @@ services:
         arguments: ['@service_container']
     trade.data_collector.btc_markets:
         class: GetRepo\TradeBundle\DataCollector\BTCMarketsDataCollector
-        arguments: ['@trade.client.btc_markets']
+        arguments: ['@trade.client.btc_markets', '%kernel.cache_dir%/trade/data']

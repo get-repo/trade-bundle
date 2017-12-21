@@ -12,6 +12,7 @@ use Symfony\Component\Console\Exception\RuntimeException;
 use Symfony\Component\Console\Helper\Table;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 /**
@@ -50,6 +51,7 @@ class BTCMarketsCommand extends ContainerAwareCommand
             ->setName('trade:btc')
             ->addArgument('action', InputArgument::REQUIRED, 'Action name.')
             ->addArgument('filter', InputArgument::OPTIONAL, 'Optional filter.')
+            ->addOption('with-orderbook', null, InputOption::VALUE_NONE, 'Collect data with order book')
             ->setDescription('BTC markets command line')
             ->setHelp(<<<'EOF'
 The <info>%command.name%</info> manage BTC market trades
@@ -296,5 +298,10 @@ EOF
      */
     private function doCollectData(InputInterface $input, OutputInterface $output)
     {
+        $orderBook = $input->getOption('with-orderbook');
+        $collector = $this->getContainer()->get('trade.data_collector.btc_markets');
+        $collector->collectAll($orderBook);
+        $orderBook = $orderBook ? 'with orderbooks ' : '';
+        $output->writeln("<info>Data collected {$orderBook}successfully!</info>");
     }
 }

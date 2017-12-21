@@ -33,5 +33,9 @@ class TradeExtension extends Extension
         $config = $this->processConfiguration($configuration, $configs);
 
         $container->setParameter('trade.config', $config);
+
+        $container->prependExtensionConfig('twig', [
+            'paths' => [__DIR__.'/../' => 'TradeBundle'],
+        ]);
     }
 }

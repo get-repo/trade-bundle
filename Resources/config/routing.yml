@@ -1,0 +1,3 @@
+trade_charts:
+    path: /btc/charts/show
+    defaults: { _controller: 'TradeBundle:Chart:show' }
