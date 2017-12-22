@@ -66,7 +66,7 @@ The <info>%command.name%</info> manage BTC market trades
 <comment>Show the order book for an instrument:</comment>
   <info>php %command.full_name% market (alias: m) BTC</info>
   <info>php %command.full_name% m XRP,15</info>
-<comment>Price alert (from cron):</comment>
+<comment>Price alert (infinite loop script):</comment>
   <info>php %command.full_name% alert (alias: a) XRP,1.5</info>
 <comment>Clear the cache:</comment>
   <info>php %command.full_name% clear-cache (alias: cc)</info>
@@ -87,7 +87,6 @@ EOF
         }
 
         $action = $input->getArgument('action');
-
         foreach ($this->actionsMap as $method => $aliases) {
             foreach ($aliases as $alias) {
                 if (trim($action) === trim($alias)) {
@@ -306,26 +305,38 @@ EOF
     private function doAlert(InputInterface $input, OutputInterface $output)
     {
         $params = $this->parseFilterArgument($input);
+
         if (!isset($params[1])) {
             throw new RuntimeException('Specify a value after the filter (e.g.: XRP,1.5)');
         }
+
         $instrument = $params[0];
         $limit = (float) $params[1];
 
-        $beep = function ($nb, $delay = 1) {
-            for ($i = 0; $i < $nb; ++$i) {
-                exec('play -q ' . __DIR__ . '/../Resources/sounds/beep.wav');
-                usleep($delay * 100000);
-            }
-        };
+        if (isset($params[2]) && $params[2] == 'cron') {
+            $beep = function ($nb, $delay = 1) {
+                for ($i = 0; $i < $nb; ++$i) {
+                    exec('play -q ' . __DIR__ . '/../Resources/sounds/beep.wav');
+                    usleep($delay * 100000);
+                }
+            };
 
-        $price = $this->client->getLastPrice('XRP');
-        if ($price <= $limit) {
-            $output->writeln("<error>{$price}</error>");
-            $beep(3, 7);
-            $beep(10);
-        } else {
-            $output->writeln("<info>{$price}</info>");
+            $price = $this->client->getLastPrice('XRP');
+            if ($price <= $limit) {
+                $output->writeln("LIMIT {$price}");
+                $beep(3, 7);
+                $beep(10);
+            } else {
+                $output->writeln($price);
+            }
+
+            exit;
+        }
+
+        $rootDir = $this->getContainer()->getParameter('kernel.root_dir') . '/..';
+        while (true) {
+            $output->writeln(exec("php {$rootDir}/bin/console trade:btc alert {$instrument},{$limit},cron"));
+            sleep(15);
         }
     }
 
