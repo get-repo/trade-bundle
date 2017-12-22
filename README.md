@@ -50,18 +50,18 @@ Help:
   The trade:btc manage BTC market trades
   
   Show your blance:
-    php /home/kevin/www/sf/bin/console trade:btc balance (alias: b)
+    php bin/console trade:btc balance (alias: b)
   Show your funds:
-    php /home/kevin/www/sf/bin/console trade:btc funds (alias: f)
+    php bin/console trade:btc funds (alias: f)
   Show the currency prices:
-    php /home/kevin/www/sf/bin/console trade:btc ticks (alias: t)
+    php bin/console trade:btc ticks (alias: t)
   Show the order book for an instrument:
-    php /home/kevin/www/sf/bin/console trade:btc market (alias: m) BTC
-    php /home/kevin/www/sf/bin/console trade:btc m XRP,15
+    php bin/console trade:btc market (alias: m) BTC
+    php bin/console trade:btc m XRP,15
   Price alert (infinite loop script):
-    php /home/kevin/www/sf/bin/console trade:btc alert (alias: a) XRP,1.5
+    php bin/console trade:btc alert (alias: a) XRP,1.5
   Clear the cache:
-    php /home/kevin/www/sf/bin/console trade:btc clear-cache (alias: cc)
+    php bin/console trade:btc clear-cache (alias: cc)
 ```
 
 
