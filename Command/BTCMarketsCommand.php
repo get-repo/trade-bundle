@@ -30,6 +30,7 @@ class BTCMarketsCommand extends ContainerAwareCommand
         'doMarket' => ['m', 'market', 'm'],
         'doClearCache' => ['clear-cache', 'cache-clear', 'clearcache', 'cacheclear', 'cc'],
         'doCollectData' => ['collect-data', 'collectdata', 'cd'],
+        'doAlert' => ['a', 'alert'],
     ];
 
     /**
@@ -65,6 +66,8 @@ The <info>%command.name%</info> manage BTC market trades
 <comment>Show the order book for an instrument:</comment>
   <info>php %command.full_name% market (alias: m) BTC</info>
   <info>php %command.full_name% m XRP,15</info>
+<comment>Price alert (from cron):</comment>
+  <info>php %command.full_name% alert (alias: a) XRP,1.5</info>
 <comment>Clear the cache:</comment>
   <info>php %command.full_name% clear-cache (alias: cc)</info>
 
@@ -240,20 +243,9 @@ EOF
      */
     private function doMarket(InputInterface $input, OutputInterface $output)
     {
-        $defaultMax = 200;
-        $instrument = $input->getArgument('filter');
-
-        if (!$instrument) {
-            throw new RuntimeException('Specify an instrument in filter argument');
-        }
-
-        $params = explode(',', $instrument);
-        $instrument = strtoupper($params[0]);
-        if (!in_array($instrument, $this->client->getInstruments())) {
-            throw new RuntimeException("Wrong instrument {$instrument}</error>");
-        }
-
-        $max = (isset($params[1]) && $params[1]) ? $params[1] : $defaultMax;
+        $params = $this->parseFilterArgument($input);
+        $instrument = $params[0];
+        $max = (isset($params[1]) && $params[1]) ? $params[1] : 200;
 
         $book = $this->client->getMarketOrderBook($instrument);
         $this->table->setHeaders([
@@ -303,5 +295,59 @@ EOF
         $collector->collectAll($orderBook);
         $orderBook = $orderBook ? 'with orderbooks ' : '';
         $output->writeln("<info>Data collected {$orderBook}successfully!</info>");
+    }
+
+    /**
+     * @param InputInterface  $input
+     * @param OutputInterface $output
+     *
+     * @throws RuntimeException
+     */
+    private function doAlert(InputInterface $input, OutputInterface $output)
+    {
+        $params = $this->parseFilterArgument($input);
+        if (!isset($params[1])) {
+            throw new RuntimeException('Specify a value after the filter (e.g.: XRP,1.5)');
+        }
+        $instrument = $params[0];
+        $limit = (float) $params[1];
+
+        $beep = function ($nb, $delay = 1) {
+            for ($i = 0; $i < $nb; ++$i) {
+                exec('play -q ' . __DIR__ . '/../Resources/sounds/beep.wav');
+                usleep($delay * 100000);
+            }
+        };
+
+        $price = $this->client->getLastPrice('XRP');
+        if ($price <= $limit) {
+            $output->writeln("<error>{$price}</error>");
+            $beep(3, 7);
+            $beep(10);
+        } else {
+            $output->writeln("<info>{$price}</info>");
+        }
+    }
+
+    /**
+     * @return array
+     */
+    private function parseFilterArgument(InputInterface $input, $default = 200)
+    {
+        $instrument = $input->getArgument('filter');
+
+        if (!$instrument) {
+            throw new RuntimeException('Specify an instrument in filter argument');
+        }
+
+        $params = explode(',', $instrument);
+        $instrument = strtoupper($params[0]);
+        if (!in_array($instrument, $this->client->getInstruments())) {
+            throw new RuntimeException("Wrong instrument {$instrument}");
+        }
+
+        $params[0] = $instrument;
+
+        return $params;
     }
 }
