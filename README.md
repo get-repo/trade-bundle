@@ -30,3 +30,13 @@ trade_charts:
     resource: '@TradeBundle/Resources/config/routing.yml'
     prefix: trade
 ```
+
+
+## Configuration Reference
+```yaml
+trade:
+    btc_markets:
+        api_key: 'your-api-key-here'
+        private_key: 'your-api-private-key-here'
+
+```
