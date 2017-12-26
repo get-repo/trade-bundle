@@ -57,7 +57,7 @@ class BTCMarketsCommand extends ContainerAwareCommand
             ->setHelp(<<<'EOF'
 The <info>%command.name%</info> manage BTC market trades
 
-<comment>Show your blance:</comment>
+<comment>Show your balance:</comment>
   <info>php %command.full_name% balance (alias: b)</info>
 <comment>Show your funds:</comment>
   <info>php %command.full_name% funds (alias: f)</info>
@@ -66,7 +66,9 @@ The <info>%command.name%</info> manage BTC market trades
 <comment>Show the order book for an instrument:</comment>
   <info>php %command.full_name% market (alias: m) BTC</info>
   <info>php %command.full_name% m XRP,15</info>
-<comment>Price alert (infinite loop script):</comment>
+<comment>Collect Data (cron script):</comment>
+  <info>php %command.full_name% collect-data (alias: cd)</info>
+<comment>Price alert (cron script):</comment>
   <info>php %command.full_name% alert (alias: a) XRP,1.5</info>
 <comment>Clear the cache:</comment>
   <info>php %command.full_name% clear-cache (alias: cc)</info>
