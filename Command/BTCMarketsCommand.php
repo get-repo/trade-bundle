@@ -125,9 +125,9 @@ EOF
 
         $nb = 0;
         foreach ($balances as $instrument => $bal) {
-            $diff = '';
             $tick = '';
-            $total = '';
+            $price = '';
+            $diff = '';
 
             if ('AUD' !== $instrument) {
                 if (!$bal['balance']) {
@@ -136,8 +136,9 @@ EOF
                 $trades = $this->client->getLastTrades($instrument);
                 if ($trades) {
                     $tick = $this->client->getBestBid($instrument);
+                    $price = $bal['price'];
                     $diff = $bal['balance'] * $tick;
-                    $total = number_format($diff, 2);
+
                     foreach ($trades as $trade) {
                         if ('Bid' === $trade['side']) {
                             $diff = $diff - $trade['amount'];
@@ -156,7 +157,7 @@ EOF
                     "<comment>{$instrument}</comment>",
                     $bal['balance'],
                     $tick,
-                    $total,
+                    $price,
                     ($diff ? "<{$diffFormat}>{$diff}</{$diffFormat}>" : $diff),
                 ]
             );
