@@ -6,55 +6,37 @@
 
 namespace GetRepo\TradeBundle\Command;
 
-use GetRepo\TradeBundle\Client\BTCMarketsClient;
-use Symfony\Bundle\FrameworkBundle\Command\ContainerAwareCommand;
 use Symfony\Component\Console\Exception\RuntimeException;
-use Symfony\Component\Console\Helper\Table;
-use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
-use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 /**
  * BTCMarkets command line.
  */
-class BTCMarketsCommand extends ContainerAwareCommand
+class BTCMarketsCommand extends AbstractCommand
 {
     /**
-     * @var array
+     * {@inheritdoc}
      */
-    private $actionsMap = [
-        'doBalance' => ['b', 'balance'],
-        'doFunds' => ['f', 'funds'],
-        'doTicks' => ['t', 'ticks'],
-        'doMarket' => ['m', 'market', 'm'],
-        'doClearCache' => ['clear-cache', 'cache-clear', 'clearcache', 'cacheclear', 'cc'],
-        'doCollectData' => ['collect-data', 'collectdata', 'cd'],
-        'doAlert' => ['a', 'alert'],
-    ];
-
-    /**
-     * @var BTCMarketsClient
-     */
-    private $client;
-
-    /**
-     * @var Table
-     */
-    private $table;
+    protected function getActionMap()
+    {
+        return[
+            'doBalance' => ['b', 'balance'],
+            'doFunds' => ['f', 'funds'],
+            'doTicks' => ['t', 'ticks'],
+            'doMarket' => ['m', 'market', 'm'],
+            'doClearCache' => ['c', 'clear-cache', 'cache-clear', 'clearcache', 'cacheclear'],
+            'doCollectData' => ['cd', 'collect-data', 'collectdata'],
+            'doAlert' => ['a', 'alert'],
+        ];
+    }
 
     /**
      * {@inheritdoc}
      */
-    protected function configure()
+    protected function getHelpContent()
     {
-        $this
-            ->setName('trade:btc')
-            ->addArgument('action', InputArgument::REQUIRED, 'Action name.')
-            ->addArgument('filter', InputArgument::OPTIONAL, 'Optional filter.')
-            ->addOption('with-orderbook', null, InputOption::VALUE_NONE, 'Collect data with order book')
-            ->setDescription('BTC markets command line')
-            ->setHelp(<<<'EOF'
+        return <<<'HELP'
 The <info>%command.name%</info> manage BTC market trades
 
 <comment>Show your balance:</comment>
@@ -71,47 +53,15 @@ The <info>%command.name%</info> manage BTC market trades
 <comment>Price alert (cron script):</comment>
   <info>php %command.full_name% alert (alias: a) XRP,1.5</info>
 <comment>Clear the cache:</comment>
-  <info>php %command.full_name% clear-cache (alias: cc)</info>
-
-EOF
-            );
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    protected function execute(InputInterface $input, OutputInterface $output)
-    {
-        $container = $this->getContainer();
-        $bundles = $container->getParameter('kernel.bundles');
-        if (!isset($bundles['TradeBundle'])) {
-            throw new RuntimeException('Bundle "TradeBundle" is not enabled in AppKernel');
-        }
-
-        $action = $input->getArgument('action');
-        foreach ($this->actionsMap as $method => $aliases) {
-            foreach ($aliases as $alias) {
-                if (trim($action) === trim($alias)) {
-                    if (!method_exists($this, $method)) {
-                        throw new RuntimeException("Method '{$method}' does not exists.");
-                    }
-
-                    $this->table = new Table($output);
-                    $this->client = $container->get('trade.client.btc_markets');
-
-                    return $this->$method($input, $output);
-                }
-            }
-        }
-
-        throw new RuntimeException("Action '{$action}' does not exists.");
+  <info>php %command.full_name% clear-cache (alias: c)</info>
+HELP;
     }
 
     /**
      * @param InputInterface  $input
      * @param OutputInterface $output
      */
-    private function doBalance(InputInterface $input, OutputInterface $output)
+    protected function doBalance(InputInterface $input, OutputInterface $output)
     {
         $balances = $this->client->getBalances();
 
@@ -187,7 +137,7 @@ EOF
      * @param InputInterface  $input
      * @param OutputInterface $output
      */
-    private function doFunds(InputInterface $input, OutputInterface $output)
+    protected function doFunds(InputInterface $input, OutputInterface $output)
     {
         $this->table->setHeaders([
             '<comment>Date</comment>',
@@ -225,7 +175,7 @@ EOF
      * @param InputInterface  $input
      * @param OutputInterface $output
      */
-    private function doTicks(InputInterface $input, OutputInterface $output)
+    protected function doTicks(InputInterface $input, OutputInterface $output)
     {
         $cpt = 0;
         foreach ($this->client->getInstruments() as $instrument) {
@@ -243,7 +193,7 @@ EOF
      *
      * @throws RuntimeException
      */
-    private function doMarket(InputInterface $input, OutputInterface $output)
+    protected function doMarket(InputInterface $input, OutputInterface $output)
     {
         $params = $this->parseFilterArgument($input);
         $instrument = $params[0];
@@ -278,7 +228,7 @@ EOF
      * @param InputInterface  $input
      * @param OutputInterface $output
      */
-    private function doClearCache(InputInterface $input, OutputInterface $output)
+    protected function doClearCache(InputInterface $input, OutputInterface $output)
     {
         $this->client->clearCache();
         $output->writeln('<info>Cache cleared successfully!</info>');
@@ -290,7 +240,7 @@ EOF
      *
      * @throws RuntimeException
      */
-    private function doCollectData(InputInterface $input, OutputInterface $output)
+    protected function doCollectData(InputInterface $input, OutputInterface $output)
     {
         $orderBook = $input->getOption('with-orderbook');
         $collector = $this->getContainer()->get('trade.data_collector.btc_markets');
@@ -305,7 +255,7 @@ EOF
      *
      * @throws RuntimeException
      */
-    private function doAlert(InputInterface $input, OutputInterface $output)
+    protected function doAlert(InputInterface $input, OutputInterface $output)
     {
         $params = $this->parseFilterArgument($input);
 
@@ -341,27 +291,5 @@ EOF
             $output->writeln(exec("php {$rootDir}/bin/console trade:btc alert {$instrument},{$limit},cron"));
             sleep(15);
         }
-    }
-
-    /**
-     * @return array
-     */
-    private function parseFilterArgument(InputInterface $input, $default = 200)
-    {
-        $instrument = $input->getArgument('filter');
-
-        if (!$instrument) {
-            throw new RuntimeException('Specify an instrument in filter argument');
-        }
-
-        $params = explode(',', $instrument);
-        $instrument = strtoupper($params[0]);
-        if (!in_array($instrument, $this->client->getInstruments())) {
-            throw new RuntimeException("Wrong instrument {$instrument}");
-        }
-
-        $params[0] = $instrument;
-
-        return $params;
     }
 }

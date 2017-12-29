@@ -5,7 +5,8 @@
     "type": "symfony-bundle",
     "license": "MIT",
     "require": {
-        "php": ">=5.5.9"
+        "php": ">=5.5.9",
+        "jaggedsoft/php-binance-api": "@dev"
     },
     "autoload": {
         "psr-4": {
