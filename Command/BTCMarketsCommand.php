@@ -274,13 +274,18 @@ HELP;
                 }
             };
 
-            $price = $this->client->getLastPrice('XRP');
+            if (!$price = $this->client->getLastPrice('XRP')) {
+                $output->writeln("ERROR Can't get price");
+                $beep(1);
+                exit;
+            }
+
+            $output->write(date('H:i:s '));
             if ($price <= $limit) {
-                $output->writeln("LIMIT {$price}");
-                $beep(3, 7);
-                $beep(10);
+                $output->write("LIMIT {$price}");
+                $beep(7, 6);
             } else {
-                $output->writeln($price);
+                $output->write($price);
             }
 
             exit;
@@ -288,8 +293,8 @@ HELP;
 
         $rootDir = $this->getContainer()->getParameter('kernel.root_dir') . '/..';
         while (true) {
-            $output->writeln(exec("php {$rootDir}/bin/console trade:btc alert {$instrument},{$limit},cron"));
-            sleep(15);
+            $output->writeLn(exec("php {$rootDir}/bin/console trade:btc alert {$instrument},{$limit},cron"));
+            sleep(30);
         }
     }
 }
