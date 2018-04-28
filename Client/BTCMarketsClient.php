@@ -20,6 +20,16 @@ class BTCMarketsClient
      */
     const PYTHON_CLIENT_PATH = 'bin/btc-api-client-python/main.py';
 
+    /**
+     * @var int
+     */
+    const MAX_RESULTS = 200;
+
+    /**
+     * @var string
+     */
+    const FUND_STATUS_COMPLETE = 'Complete';
+
     use ContainerAwareTrait;
 
     /**
@@ -182,21 +192,39 @@ class BTCMarketsClient
         $trades = [];
 
         if ($bal) {
-            $trades = $this->call('trade_history', $currency, $instrument, 200, 1)['trades'];
+            $trades = $this->call('trade_history', $currency, $instrument, self::MAX_RESULTS, 1)['trades'];
 
+            $grouped = [];
             foreach ($trades as $i => $trade) {
+                $orderId = $trade['orderId'];
                 $trade['volume'] = $trade['volume'] / pow(10, 8);
                 $trade['price'] = $trade['price'] / pow(10, 8);
                 $trade['fee'] = $trade['fee'] / pow(10, 8);
 
-                if ('Bid' === $trade['side']) {
-                    $bal = $bal - $trade['volume'];
+                if (isset($grouped[$orderId])) {
+                    if (isset($grouped[$orderId]['_combined'])) {
+                        $grouped[$orderId]['_combined']++;
+                    } else {
+                        $grouped[$orderId]['_combined'] = 2;
+                    }
+                    foreach (['volume', 'fee'] as $k) {
+                        $grouped[$orderId][$k] += $trade[$k];
+                    }
                 } else {
-                    $bal = $bal + $trade['volume'];
+                    $grouped[$orderId] = $trade;
+                }
+            }
+
+            $trades = array_values($grouped);
+            foreach ($trades as $i => $trade) {
+                if ('Bid' === $trade['side']) {
+                    $bal -= $trade['volume'];
+                } else {
+                    $bal +=  $trade['volume'];
                 }
 
                 $trades[$i]['amount'] = ($trade['volume'] * $trade['price']) - $trade['fee'];
-                if (round($bal, 2) <= 0) {
+                if (!$bal) {
                     break;
                 }
             }
@@ -205,17 +233,6 @@ class BTCMarketsClient
         }
 
         return $trades;
-    }
-
-    /**
-     * @param string $instrumentOut
-     * @param string $instrumentIn
-     *
-     * @return array
-     */
-    public function getOpenOrders($instrumentOut, $instrumentIn = 'AUD')
-    {
-        return $this->call('order_open', $instrumentIn, $instrumentOut, 200, 1)['orders'];
     }
 
     /**
@@ -258,14 +275,13 @@ class BTCMarketsClient
         $key = 'btc.funds';
         if (!$this->cache->has($key)) {
             if (!isset($this->data['funds'])) {
-                $funds = $this->call('fund_history')['fundTransfers'];
-                foreach ($funds as $k => $fund) {
-                    $funds[$k]['amount'] = $funds[$k]['amount'] / pow(10, 8);
-                    $funds[$k]['fee'] = $funds[$k]['fee'] / pow(10, 8);
-
-                    $funds[$k]['price'] = $funds[$k]['amount'];
-                    if ('AUD' !== $fund['currency']) {
-                        $funds[$k]['price'] = $funds[$k]['price'] * $this->getBestBid($fund['currency']);
+                $funds = [];
+                foreach ($this->call('fund_history')['fundTransfers'] as $k => $fund) {
+                    if ($fund['status'] == self::FUND_STATUS_COMPLETE && 'AUD' === $fund['currency']) {
+                        $funds[] = array_merge($fund, [
+                            'amount' => ($fund['amount'] / pow(10, 8)),
+                            'fee' => ($fund['fee'] / pow(10, 8)),
+                        ]);
                     }
                 }
 
@@ -287,18 +303,83 @@ class BTCMarketsClient
         foreach ($this->getFunds() as $fund) {
             if ('Complete' === $fund['status']) {
                 if ('WITHDRAW' === $fund['transferType']) {
-                    $fund['price'] = $fund['price'] * (-1);
+                    $fund['amount'] = $fund['amount'] * (-1);
                 }
                 if (isset($fund['fee'])) {
-                    $fund['price'] = $fund['price'] - $fund['fee'];
+                    $fund['amount'] = $fund['amount'] - $fund['fee'];
                 }
 
-                $total = $total + $fund['price'];
+                $total = $total + $fund['amount'];
             }
         }
 
         return $total;
     }
+
+    public function getOpenOrders($instrumentInFilter = null, $instrumentOutFilter = null)
+    {
+        foreach(['AUD', 'BTC'] as $instrumentOut) {
+            foreach($this->getInstruments() as $instrumentIn) {
+                $orders = $this->call('order_open', $instrumentOut, $instrumentIn, 200, 1)['orders'];
+
+                foreach ($orders as $k => $order) {
+                    $orders[$k] = array_merge($order, [
+                        'volume' => ($order['volume'] / pow(10, 8)),
+                        'openVolume' => ($order['openVolume'] / pow(10, 8)),
+                        'price' => ($order['price'] / pow(10, 8)),
+                    ]);
+                }
+
+                $res["{$instrumentIn}/{$instrumentOut}"] = $orders;
+            }
+        }
+
+        return $res;
+    }
+
+    public function cancelOpenOrder($orderId)
+    {
+        p($orderId);
+    }
+
+
+    /**
+     * Get instrument balances.
+     *
+     * @return array
+     */
+    private function createOrder($type, $instrumentOut, $price, $volume, $instrumentIn)
+    {
+        throw new \Exception('TODO');
+
+        /*
+        $res = $this->call(
+            'order_create',
+            $instrumentIn,
+            $instrumentOut,
+            ($price * pow(10, 8)), // TODO create method for conversion: https://github.com/BTCMarkets/API/wiki/Trading-API#number-conversion
+            ($volume * pow(10, 8)),
+            $type,
+            'Limit',
+            'test-456v4fsd65vdf-45v6f' // TODO create desc per date and instrument
+        );
+        p($res);
+
+        $res = $this->call('order_open', 'AUD', 'XRP', 200, 1);
+        p($res, 0);
+        sleep(2);
+
+        $res = $this->call('order_cancel', $res['orders'][0]['id']);
+        p($res, 0);
+        sleep(2);
+
+
+        $res = $this->call('order_open', 'AUD', 'XRP', 200, 1);
+        p($res);
+        */
+    }
+
+
 
     /**
      * Call python library.

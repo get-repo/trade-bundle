@@ -6,6 +6,7 @@
 
 namespace GetRepo\TradeBundle\Command;
 
+use GetRepo\TradeBundle\Client\BTCMarketsClient;
 use Symfony\Component\Console\Exception\RuntimeException;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -25,6 +26,8 @@ class BTCMarketsCommand extends AbstractCommand
             'doFunds' => ['f', 'funds'],
             'doTicks' => ['t', 'ticks'],
             'doMarket' => ['m', 'market', 'm'],
+            'doListOpenOrders' => ['o', 'open-orders'],
+            'doCancelOpenOrders' => ['co', 'cancel-open-orders'],
             'doClearCache' => ['c', 'clear-cache', 'cache-clear', 'clearcache', 'cacheclear'],
             'doCollectData' => ['cd', 'collect-data', 'collectdata'],
             'doAlert' => ['a', 'alert'],
@@ -37,23 +40,28 @@ class BTCMarketsCommand extends AbstractCommand
     protected function getHelpContent()
     {
         return <<<'HELP'
-The <info>%command.name%</info> manage BTC market trades
+The <info>php bin/console %command.name%</info> manage BTC market trades
 
 <comment>Show your balance:</comment>
-  <info>php %command.full_name% balance (alias: b)</info>
+  <info>%command.name% balance (alias: b)</info>
 <comment>Show your funds:</comment>
-  <info>php %command.full_name% funds (alias: f)</info>
+  <info>%command.name% funds (alias: f)</info>
 <comment>Show the currency prices:</comment>
-  <info>php %command.full_name% ticks (alias: t)</info>
+  <info>%command.name% ticks (alias: t)</info>
 <comment>Show the order book for an instrument:</comment>
-  <info>php %command.full_name% market (alias: m) BTC</info>
-  <info>php %command.full_name% m XRP,15</info>
-<comment>Collect Data (cron script):</comment>
-  <info>php %command.full_name% collect-data (alias: cd)</info>
+  <info>%command.name% market (alias: m) BTC</info>
+  <info>%command.name% m XRP,15</info>
+<comment>List open order(s)</comment>
+  <info>%command.name% open-orders (alias: o)</info>
+<comment>Cancel open order(s)</comment>
+  <info>%command.name% cancel-open-orders (alias: co) 123456789</info>
+  <info>%command.name% cancel-open-orders (alias: co) LTC</info>
+<comment>Collect data (cron script):</comment>
+  <info>%command.name% collect-data (alias: cd)</info>
 <comment>Price alert (cron script):</comment>
-  <info>php %command.full_name% alert (alias: a) XRP,1.5</info>
+  <info>%command.name% alert (alias: a) XRP,1.5</info>
 <comment>Clear the cache:</comment>
-  <info>php %command.full_name% clear-cache (alias: c)</info>
+  <info>%command.name% clear-cache (alias: c)</info>
 HELP;
     }
 
@@ -75,18 +83,16 @@ HELP;
 
         $nb = 0;
         foreach ($balances as $instrument => $bal) {
-            $tick = '';
-            $price = '';
-            $diff = '';
+            $tick = null;
+            $diff = null;
 
             if ('AUD' !== $instrument) {
                 if (!$bal['balance']) {
                     continue;
                 }
+                $tick = $this->client->getBestBid($instrument);
                 $trades = $this->client->getLastTrades($instrument);
-                if ($trades) {
-                    $tick = $this->client->getBestBid($instrument);
-                    $price = $bal['price'];
+                if ($trades && count($trades) < BTCMarketsClient::MAX_RESULTS) {
                     $diff = $bal['balance'] * $tick;
 
                     foreach ($trades as $trade) {
@@ -107,8 +113,8 @@ HELP;
                     "<comment>{$instrument}</comment>",
                     $bal['balance'],
                     $tick,
-                    $price,
-                    ($diff ? "<{$diffFormat}>{$diff}</{$diffFormat}>" : $diff),
+                    $bal['price'],
+                    ($diff ? "<{$diffFormat}>{$diff}</{$diffFormat}>" : ''),
                 ]
             );
             ++$nb;
@@ -142,7 +148,6 @@ HELP;
         $this->table->setHeaders([
             '<comment>Date</comment>',
             '<comment>Type</comment>',
-            '<comment>Cur</comment>',
             '<comment>AUD</comment>',
         ]);
 
@@ -150,16 +155,16 @@ HELP;
         foreach ($this->client->getFunds() as $i => $fund) {
             $isDeposit = 'DEPOSIT' === $fund['transferType'];
             $typeFormat = $isDeposit ? 'fg=cyan' : 'info';
+
             $this->table->setRow($i, [
                 date('Y-m-d', $fund['creationTime'] / 1000),
                 "<{$typeFormat}>{$fund['transferType']}</{$typeFormat}>",
-                $fund['currency'],
-                number_format($fund['price'], 2),
+                number_format($fund['amount'], 2),
             ]);
             if ($isDeposit) {
-                $total = $total + $fund['price'] - $fund['fee'];
+                $total = $total + $fund['amount'] - $fund['fee'];
             } else {
-                $total = $total - $fund['price'] - $fund['fee'];
+                $total = $total - $fund['amount'] - $fund['fee'];
             }
         }
 
@@ -222,6 +227,57 @@ HELP;
         }
 
         $this->table->render();
+    }
+
+    /**
+     * @param InputInterface  $input
+     * @param OutputInterface $output
+     */
+    protected function doListOpenOrders(InputInterface $input, OutputInterface $output)
+    {
+        $this->table->setHeaders([
+            null,
+            '<comment>Id</comment>',
+            '<comment>Date</comment>',
+            '<comment>Type</comment>',
+            '<comment>Volume</comment>',
+            '<comment>Price</comment>',
+            '<comment>Status</comment>',
+        ]);
+
+        $nb = 0;
+        foreach ($this->client->getOpenOrders() as $instrument => $orders) {
+            foreach ($orders as $order) {
+                $sideColor = ('Bid' == $order['orderSide'] ? 'green' : 'red');
+                $this->table->setRow(
+                    $nb,
+                    [
+                        "<comment>{$instrument}</comment>",
+                        $order['id'],
+                        date('Y-m-d', $order['creationTime'] / 1000),
+                        "<fg={$sideColor}>" . $order['orderSide'] . "</fg={$sideColor}>",
+                        $order['volume'],
+                        $order['price'],
+                        $order['status'],
+                    ]
+                );
+                $nb++;
+            }
+        }
+
+        $this->table->render();
+    }
+
+    /**
+     * @param InputInterface  $input
+     * @param OutputInterface $output
+     */
+    protected function doCancelOpenOrders(InputInterface $input, OutputInterface $output)
+    {
+        $params = $this->parseFilterArgument($input);
+        p($params[0]);
+
+        $this->client->cancelOpenOrder();
     }
 
     /**
