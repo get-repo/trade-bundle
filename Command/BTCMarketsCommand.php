@@ -10,6 +10,7 @@ use GetRepo\TradeBundle\Client\BTCMarketsClient;
 use Symfony\Component\Console\Exception\RuntimeException;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\Console\Question\ConfirmationQuestion;
 
 /**
  * BTCMarkets command line.
@@ -21,16 +22,40 @@ class BTCMarketsCommand extends AbstractCommand
      */
     protected function getActionMap()
     {
+        $instruments = $this->client->getInstruments();
+
         return[
-            'doBalance' => ['b', 'balance'],
-            'doFunds' => ['f', 'funds'],
-            'doTicks' => ['t', 'ticks'],
-            'doMarket' => ['m', 'market', 'm'],
-            'doListOpenOrders' => ['o', 'open-orders'],
-            'doCancelOpenOrders' => ['co', 'cancel-open-orders'],
-            'doClearCache' => ['c', 'clear-cache', 'cache-clear', 'clearcache', 'cacheclear'],
-            'doCollectData' => ['cd', 'collect-data', 'collectdata'],
-            'doAlert' => ['a', 'alert'],
+            'doBalance' => [['b', 'balance']],
+            'doFunds' => [['f', 'funds']],
+            'doTicks' => [['t', 'ticks']],
+            'doMarket' => [
+                ['m', 'market'], // alias(es)
+                ['instrument' => $instruments], // mandatory args map
+            ],
+            'doListOpenOrders' => [['o', 'open-orders']],
+            'doCancelOpenOrders' => [
+                ['co', 'cancel-open-orders'],
+                [
+                    // instrument or order id
+                    'instrument or id' => '/^(' . implode('|', $instruments) . '|\d+)?$/',
+                    // pair optional
+                    // TODO use method get pair
+                    'pair' => ['AUD', 'BTC', null],
+                ],
+            ],
+            'doClearCache' => [
+                ['c', 'clear-cache', 'cache-clear', 'clearcache', 'cacheclear'],
+            ],
+            'doCollectData' => [
+                ['cd', 'collect-data', 'collectdata'],
+            ],
+            'doAlert' => [
+                ['a', 'alert'],
+                [
+                    'instrument' => $instruments,
+                    'price' => '/^\d+(\.\d+)?$/'
+                ],
+            ],
         ];
     }
 
@@ -41,27 +66,35 @@ class BTCMarketsCommand extends AbstractCommand
     {
         return <<<'HELP'
 The <info>php bin/console %command.name%</info> manage BTC market trades
-
 <comment>Show your balance:</comment>
-  <info>%command.name% balance (alias: b)</info>
+  %command.name% balance <info>(b)</info>
 <comment>Show your funds:</comment>
-  <info>%command.name% funds (alias: f)</info>
+  %command.name% funds <info>(f)</info>
 <comment>Show the currency prices:</comment>
-  <info>%command.name% ticks (alias: t)</info>
+  %command.name% ticks <info>(t)</info>
 <comment>Show the order book for an instrument:</comment>
-  <info>%command.name% market (alias: m) BTC</info>
-  <info>%command.name% m XRP,15</info>
+  <info>Show order book for instrument:</info>
+    %command.name% market BTC
+  <info>Show lhe last 15 orders for instrument:</info>
+    %command.name% m XRP 15
 <comment>List open order(s)</comment>
-  <info>%command.name% open-orders (alias: o)</info>
+  %command.name% open-orders <info>(o)</info>
 <comment>Cancel open order(s)</comment>
-  <info>%command.name% cancel-open-orders (alias: co) 123456789</info>
-  <info>%command.name% cancel-open-orders (alias: co) LTC</info>
+  <info>Cancel one open order by id:</info>
+    %command.name% cancel-open-orders 123456789
+  <info>Cancel all open orders by instrument (all pairs):</info>
+    %command.name% co LTC
+  <info>Cancel all open orders by instrument with pair:</info>
+    %command.name% co ETH USD
 <comment>Collect data (cron script):</comment>
-  <info>%command.name% collect-data (alias: cd)</info>
+  %command.name% collect-data <info>(cd)</info>
 <comment>Price alert (cron script):</comment>
-  <info>%command.name% alert (alias: a) XRP,1.5</info>
+  <info>Set an alarm when XRP goes under 1.5:</info>
+    %command.name% alert XRP 1.5
+  <info>Set an alarm when BTC goes under 10000:</info>
+    %command.name% a BTC 10000
 <comment>Clear the cache:</comment>
-  <info>%command.name% clear-cache (alias: c)</info>
+  %command.name% clear-cache <info>(c)</info>
 HELP;
     }
 
@@ -71,6 +104,7 @@ HELP;
      */
     protected function doBalance(InputInterface $input, OutputInterface $output)
     {
+
         $balances = $this->client->getBalances();
 
         $this->table->setHeaders([
@@ -93,15 +127,17 @@ HELP;
                 $tick = $this->client->getBestBid($instrument);
                 $trades = $this->client->getLastTrades($instrument);
                 if ($trades && count($trades) < BTCMarketsClient::MAX_RESULTS) {
-                    $diff = $bal['balance'] * $tick;
 
-                    foreach ($trades as $trade) {
+                    $netCost = 0;
+                    foreach (array_reverse($trades) as $trade) {
                         if ('Bid' === $trade['side']) {
-                            $diff = $diff - $trade['amount'];
+                            $netCost += $trade['amount'];
                         } else {
-                            $diff = $diff + $trade['amount'];
+                            $netCost -= $trade['amount'];
                         }
                     }
+
+                    $diff = ($bal['balance'] * $tick) - $netCost;
                     $diffFormat = $diff > 0 ? 'info' : 'fg=red';
                     $diff = number_format($diff, 2);
                 }
@@ -200,9 +236,11 @@ HELP;
      */
     protected function doMarket(InputInterface $input, OutputInterface $output)
     {
-        $params = $this->parseFilterArgument($input);
-        $instrument = $params[0];
-        $max = (isset($params[1]) && $params[1]) ? $params[1] : 200;
+        $instrument = $input->getArgument('arg1');
+        if (!$max = $input->getArgument('arg2')) {
+            $max = 200; // TODO put that in constant 200
+        }
+        // TODO if $max > 200
 
         $book = $this->client->getMarketOrderBook($instrument);
         $this->table->setHeaders([
@@ -214,16 +252,18 @@ HELP;
         ]);
 
         for ($i = 0; $i < $max; ++$i) {
-            $this->table->setRow(
-                $i,
-                [
-                    "<info>{$book['bids'][$i][0]}</info>",
-                    "<info>{$book['bids'][$i][1]}</info>",
-                    null,
-                    "<fg=red>{$book['asks'][$i][0]}</fg=red>",
-                    "<fg=red>{$book['asks'][$i][1]}</fg=red>",
-                ]
-            );
+            if (isset($book['bids'][$i])) {
+                $this->table->setRow(
+                    $i,
+                    [
+                        "<info>{$book['bids'][$i][0]}</info>",
+                        "<info>{$book['bids'][$i][1]}</info>",
+                        null,
+                        "<fg=red>{$book['asks'][$i][0]}</fg=red>",
+                        "<fg=red>{$book['asks'][$i][1]}</fg=red>",
+                        ]
+                    );
+            }
         }
 
         $this->table->render();
@@ -246,22 +286,24 @@ HELP;
         ]);
 
         $nb = 0;
-        foreach ($this->client->getOpenOrders() as $instrument => $orders) {
-            foreach ($orders as $order) {
-                $sideColor = ('Bid' == $order['orderSide'] ? 'green' : 'red');
-                $this->table->setRow(
-                    $nb,
-                    [
-                        "<comment>{$instrument}</comment>",
-                        $order['id'],
-                        date('Y-m-d', $order['creationTime'] / 1000),
-                        "<fg={$sideColor}>" . $order['orderSide'] . "</fg={$sideColor}>",
-                        $order['volume'],
-                        $order['price'],
-                        $order['status'],
-                    ]
-                );
-                $nb++;
+        foreach ($this->client->getOpenOrders() as $instrumentIn => $instOrders) {
+            foreach ($instOrders as $instrumentOut => $orders) {
+                foreach ($orders as $order) {
+                    $sideColor = ('Bid' == $order['orderSide'] ? 'green' : 'red');
+                    $this->table->setRow(
+                        $nb,
+                        [
+                            "<comment>{$instrumentIn}/{$instrumentOut}</comment>",
+                            $order['id'],
+                            date('Y-m-d', $order['creationTime'] / 1000),
+                            "<fg={$sideColor}>" . $order['orderSide'] . "</fg={$sideColor}>",
+                            $order['volume'],
+                            $order['price'],
+                            $order['status'],
+                        ]
+                    );
+                    $nb++;
+                }
             }
         }
 
@@ -274,10 +316,61 @@ HELP;
      */
     protected function doCancelOpenOrders(InputInterface $input, OutputInterface $output)
     {
-        $params = $this->parseFilterArgument($input);
-        p($params[0]);
+        $filter = $input->getArgument('arg1');
+        $pair = $input->getArgument('arg2');
+        $helper = $this->getHelper('question');
+        $ids = [];
 
-        $this->client->cancelOpenOrder();
+        // cancel all instrument open orders
+        if (in_array($filter, $this->client->getInstruments())) {
+            $question = new ConfirmationQuestion(
+                "Cancel all {$filter}" .
+                ($pair ? "/{$pair}" : '') .
+                " open orders (Y/n)? ",
+                false,
+                '/^Y$/'
+            );
+
+            if (!$helper->ask($input, $output, $question)) {
+                return;
+            }
+
+            foreach ($this->client->getOpenOrders($filter, $pair) as $orders) {
+                if (!$pair) {
+                    foreach ($orders as $order) {
+                        $ids[] = (int) $order['id'];
+                    }
+                } else {
+                    $ids[] = (int) $orders['id'];
+                }
+            }
+        }
+        // cancel one by open order id
+        else {
+            $question = new ConfirmationQuestion(
+                "Cancel open order {$filter} (Y/n)? ",
+                false,
+                '/^Y$/'
+            );
+
+            if (!$helper->ask($input, $output, $question)) {
+                return;
+            }
+            $ids[] = (int) $filter;
+        }
+
+        foreach ($ids as $id) {
+            $output->write("  > cancel {$id} ... ");
+            try {
+                $this->client->cancelOpenOrder($id);
+                $output->writeln("<info>[OK]</info>");
+            } catch (\Exception $e) {
+                $msg = $e->getMessage();
+                $output->writeln(
+                    "<fg=red>[FAILED] {$msg}</fg=red>"
+                );
+            }
+        }
     }
 
     /**
@@ -313,16 +406,11 @@ HELP;
      */
     protected function doAlert(InputInterface $input, OutputInterface $output)
     {
-        $params = $this->parseFilterArgument($input);
+        $instrument = $input->getArgument('arg1');
+        $limit = (float) $input->getArgument('arg2');
+        $run = $input->getArgument('arg3') === 'cron';
 
-        if (!isset($params[1])) {
-            throw new RuntimeException('Specify a value after the filter (e.g.: XRP,1.5)');
-        }
-
-        $instrument = $params[0];
-        $limit = (float) $params[1];
-
-        if (isset($params[2]) && $params[2] == 'cron') {
+        if ($run) {
             $beep = function ($nb, $delay = 1) {
                 for ($i = 0; $i < $nb; ++$i) {
                     exec('play -q ' . __DIR__ . '/../Resources/sounds/beep.wav');
@@ -349,7 +437,9 @@ HELP;
 
         $rootDir = $this->getContainer()->getParameter('kernel.root_dir') . '/..';
         while (true) {
-            $output->writeLn(exec("php {$rootDir}/bin/console trade:btc alert {$instrument},{$limit},cron"));
+            $output->writeLn(exec(
+                "php {$rootDir}/bin/console trade:btc alert {$instrument} {$limit} cron"
+            ));
             sleep(30);
         }
     }

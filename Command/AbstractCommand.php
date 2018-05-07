@@ -19,6 +19,7 @@ use Symfony\Component\Console\Output\OutputInterface;
  */
 abstract class AbstractCommand extends ContainerAwareCommand
 {
+    const ARGS_REGEXP = '/^arg\d+$/';
     /**
      * @var Table
      */
@@ -49,8 +50,9 @@ abstract class AbstractCommand extends ContainerAwareCommand
         $this
             ->setName("trade:{$name}")
             ->addArgument('action', InputArgument::REQUIRED, 'Action name.')
-            ->addArgument('filter', InputArgument::OPTIONAL, 'Optional filter.')
-            ->addOption('with-orderbook', null, InputOption::VALUE_NONE, 'Collect data with order book')
+            ->addArgument('arg1', InputArgument::OPTIONAL)
+            ->addArgument('arg2', InputArgument::OPTIONAL)
+            ->addArgument('arg3', InputArgument::OPTIONAL)
             ->setDescription("{$exchange} command line")
             ->setHelp($this->getHelpContent());
     }
@@ -67,15 +69,68 @@ abstract class AbstractCommand extends ContainerAwareCommand
         }
 
         $action = $input->getArgument('action');
-        foreach ($this->getActionMap() as $method => $aliases) {
+        $args = array_values($this->getArguments($input));
+        $this->client = $container->get('trade.client.btc_markets');
+
+        foreach ($this->getActionMap() as $method => $conf) {
+            $aliases = (array) $conf[0];
+
             foreach ($aliases as $alias) {
                 if (trim($action) === trim($alias)) {
                     if (!method_exists($this, $method)) {
-                        throw new RuntimeException("Method '{$method}' does not exists.");
+                        throw new RuntimeException(
+                            "Method '{$method}' does not exists."
+                        );
+                    }
+
+                    // nb args
+                    if (isset($conf[1]) && ($nbArgs = count($argsMap = (array) $conf[1]))) {
+                        $i = 0;
+                        foreach ($argsMap as $argName => $validation) {
+                            $argValue = isset($args[$i]) ? $args[$i] : null;
+                            if ($validation) {
+                                switch (gettype($validation)) {
+                                    case 'array':
+                                        if (!in_array($argValue, $validation)) {
+                                            $i = $i+2;
+                                            $values = '';
+                                            foreach ($validation as $value) {
+                                                $values .= var_export($value, true) . ', ';
+                                            }
+                                            $values = trim($values, ', ');
+
+                                            throw new RuntimeException(
+                                                "Argument #{$i} '{$argName}' value '{$argValue}' is invalid.\n" .
+                                                "Choose a value between: {$values}"
+                                            );
+                                        }
+                                        break;
+
+                                    case 'string':
+                                        $res = @preg_match($validation, $argValue);
+                                        // regex validation
+                                        if (0 === $res) {
+                                            $i = $i+2;
+                                            throw new RuntimeException(
+                                                "Argument #{$i} '{$argName}' value '{$argValue}' is invalid.\n" .
+                                                "Value does not match."
+                                            );
+                                        // string validation
+                                        } elseif (false === $res && $validation != $argValue) {
+                                            $i = $i+2;
+                                            throw new RuntimeException(
+                                                "Argument #{$i} '{$argName}' value '{$argValue}' is invalid.\n" .
+                                                "Value is not equal to '{$validation}'."
+                                            );
+                                        }
+                                        break;
+                                }
+                            }
+                            $i++;
+                        }
                     }
 
                     $this->table = new Table($output);
-                    $this->client = $container->get('trade.client.btc_markets');
 
                     return $this->$method($input, $output);
                 }
@@ -85,26 +140,18 @@ abstract class AbstractCommand extends ContainerAwareCommand
         throw new RuntimeException("Action '{$action}' does not exists.");
     }
 
-
     /**
      * @return array
      */
-    protected function parseFilterArgument(InputInterface $input, $default = 200)
+    private function getArguments(InputInterface $input)
     {
-        $instrument = $input->getArgument('filter');
+        $args = $input->getArguments();
 
-        if (!$instrument) {
-            throw new RuntimeException('Specify an instrument in filter argument');
-        }
-
-        $params = explode(',', $instrument);
-        $instrument = strtoupper($params[0]);
-        if (!in_array($instrument, $this->client->getInstruments())) {
-            throw new RuntimeException("Wrong instrument {$instrument}");
-        }
-
-        $params[0] = $instrument;
-
-        return $params;
+        return array_filter(
+            array_intersect_key(
+                $args,
+                array_flip(preg_grep(self::ARGS_REGEXP, array_keys($args)))
+            )
+        );
     }
 }

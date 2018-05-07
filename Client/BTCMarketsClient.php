@@ -48,6 +48,13 @@ class BTCMarketsClient
     private $data = [];
 
     /**
+     * @var array
+     */
+    private $instruments = [
+        'BTC', 'LTC', 'ETH', 'ETC', 'XRP', 'BCH',
+    ];
+
+    /**
      * @param ContainerInterface $container
      */
     public function __construct(ContainerInterface $container)
@@ -73,6 +80,11 @@ class BTCMarketsClient
     public function getInstruments()
     {
         $key = 'btc.instruments';
+
+        if (isset($this->instruments) && $this->instruments) {
+            return $this->instruments;
+        }
+
         if (!$this->cache->has($key)) {
             $this->data['balances'] = $this->call('account_balance');
 
@@ -223,7 +235,7 @@ class BTCMarketsClient
                     $bal +=  $trade['volume'];
                 }
 
-                $trades[$i]['amount'] = ($trade['volume'] * $trade['price']) - $trade['fee'];
+                $trades[$i]['amount'] = ($trade['volume'] * $trade['price']);
                 if (!$bal) {
                     break;
                 }
@@ -318,8 +330,16 @@ class BTCMarketsClient
 
     public function getOpenOrders($instrumentInFilter = null, $instrumentOutFilter = null)
     {
+        $res = [];
+
+        // TODO set in a $this->pairs var
         foreach(['AUD', 'BTC'] as $instrumentOut) {
             foreach($this->getInstruments() as $instrumentIn) {
+                if (($instrumentOutFilter && $instrumentOutFilter != $instrumentOut)
+                    || ($instrumentInFilter && $instrumentInFilter != $instrumentIn)) {
+                    continue;
+                }
+
                 $orders = $this->call('order_open', $instrumentOut, $instrumentIn, 200, 1)['orders'];
 
                 foreach ($orders as $k => $order) {
@@ -330,8 +350,21 @@ class BTCMarketsClient
                     ]);
                 }
 
-                $res["{$instrumentIn}/{$instrumentOut}"] = $orders;
+                $res[$instrumentIn][$instrumentOut] = $orders;
             }
+        }
+
+        if ($instrumentInFilter && $instrumentOutFilter) {
+            return isset($res[$instrumentInFilter][$instrumentOutFilter]) ? $res[$instrumentInFilter][$instrumentOutFilter] : [];
+        } elseif ($instrumentInFilter) {
+            return isset($res[$instrumentInFilter]) ? $res[$instrumentInFilter] : [];
+        } elseif ($instrumentOutFilter) {
+            $filtered = [];
+            foreach ($res as $instrumentIn => $orders) {
+                $filtered[$instrumentIn] = isset($orders[$instrumentOutFilter]) ? $orders[$instrumentOutFilter] : [];
+            }
+
+            return $filtered;
         }
 
         return $res;
@@ -339,7 +372,13 @@ class BTCMarketsClient
 
     public function cancelOpenOrder($orderId)
     {
-        p($orderId);
+        $response = $this->call('order_cancel', $orderId);
+
+        if (!$response['responses'][0]['success']) {
+            throw new \Exception($response['responses'][0]['errorMessage']);
+        }
+
+        return $response;
     }
 
 
@@ -402,8 +441,7 @@ class BTCMarketsClient
             ($args ? '"'.implode('" "', $args).'"' : '')
         );
 
-        //p("\n{$method}\n", 0);
-        //p("\n{$cmd}\n", 0);
+        //p("\n{$method}\n:{$cmd}\n", 0);
         $json = exec($cmd);
         $json = str_replace(
             ["u'", "':", "',", "'}", ' None', ' True', ' False'],
